@@ -23,9 +23,6 @@ let lastNotificationSent = null;
 // 🔔 MÓDULO DE NOTIFICACIONES TELEGRAM
 // =============================================
 
-/**
- * Función para enviar notificaciones a Telegram - SOLO PARA FALLOS
- */
 const sendTelegramNotification = async (message) => {
   try {
     const now = new Date();
@@ -35,8 +32,6 @@ const sendTelegramNotification = async (message) => {
     }
 
     const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
-
-    console.log(`📤 Enviando notificación a Telegram: ${message.substring(0, 100)}...`);
     
     const response = await axios.post(url, {
       chat_id: TELEGRAM_CHAT_ID,
@@ -53,39 +48,38 @@ const sendTelegramNotification = async (message) => {
 };
 
 // =============================================
-// 🤖 MÓDULO CLIENTE WHATSAPP
+// 🤖 MÓDULO CLIENTE WHATSAPP OPTIMIZADO PARA LINUX
 // =============================================
 
 const client = new Client({
   authStrategy: new LocalAuth({
-    clientId: process.env.CLIENT_ID || "mikrotik-session",
+    clientId: process.env.CLIENT_ID || "whatsapp-bot-vps",
   }),
   puppeteer: {
-    headless: false,
+    headless: true, // ✅ IMPORTANTE: true para servidor Linux
     args: [
       "--no-sandbox",
-      "--disable-setuid-sandbox",
+      "--disable-setuid-sandbox", 
       "--disable-dev-shm-usage",
       "--disable-accelerated-2d-canvas",
       "--no-first-run",
       "--no-zygote",
       "--disable-gpu",
-      "--disable-web-security",
-      "--allow-running-insecure-content",
+      "--single-process", // ✅ Optimización para Linux
       "--disable-features=VizDisplayCompositor",
+      "--disable-software-rasterizer",
+      "--disable-background-timer-throttling",
+      "--disable-backgrounding-occluded-windows",
+      "--disable-renderer-backgrounding",
+      "--memory-pressure-off",
     ],
-    executablePath:
-      process.env.CHROME_PATH ||
-      (process.platform === "win32"
-        ? "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
-        : "/usr/bin/google-chrome"),
+    executablePath: process.env.CHROME_PATH || "/usr/bin/chromium-browser", // ✅ Chromium en Linux
     ignoreDefaultArgs: ["--disable-extensions"],
     timeout: 60000,
   },
   webVersionCache: {
     type: "remote",
-    remotePath:
-      "https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html",
+    remotePath: "https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html",
   },
 });
 
@@ -103,78 +97,63 @@ const MAX_INIT_ATTEMPTS = 3;
 // ⚙️ MÓDULO DE CONFIGURACIÓN EXPRESS
 // =============================================
 
-app.use(
-  helmet({
-    contentSecurityPolicy: false,
-    crossOriginEmbedderPolicy: false,
-  })
-);
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false,
+}));
 app.use(cors());
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 
-// Rate limiting para endpoint /send
 const limiter = rateLimit({
   windowMs: 60 * 1000,
   max: 10,
-  message: {
-    error: "🚫 Demasiadas solicitudes, intenta más tarde.",
-  },
+  message: { error: "🚫 Demasiadas solicitudes, intenta más tarde." },
 });
 app.use("/send", limiter);
 
 // =============================================
-// 🔄 MÓDULO DE EVENTOS WHATSAPP - SOLO NOTIFICACIONES DE FALLOS
+// 🔄 MÓDULO DE EVENTOS WHATSAPP
 // =============================================
 
 client.on("qr", (qr) => {
-  console.log("🟡 Escanea este QR con tu WhatsApp:");
+  console.log("🟡 QR generado - Escanea desde tu WhatsApp:");
   qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qr)}`;
   qrcode.generate(qr, { small: true });
   sessionStatus = "waiting_for_scan";
   initializationAttempts = 0;
 
-  // ✅ NOTIFICACIÓN: Necesita QR (considerado un "fallo" de conexión)
   sendTelegramNotification(`
-🔐 <b>WHATSAPP BOT - REAUTENTICACIÓN REQUERIDA</b>
+🔐 <b>WHATSAPP BOT - QR REQUERIDO</b>
 
-⚠️ La sesión de WhatsApp necesita reautenticación.
+⚠️ Necesita autenticación con QR
 
-📱 <b>Acciones requeridas:</b>
-1. Ve a la aplicación web
-2. Escanea el código QR  
+📱 <b>Pasos:</b>
+1. Abre WhatsApp → Menú → Dispositivos vinculados
+2. Escanea este QR
 3. Confirma la sesión
 
-🕐 <i>Timestamp: ${new Date().toLocaleString()}</i>
-
-🔗 <code>http://localhost:${PORT}/qr</code>
+🌐 <b>URL QR:</b> http://YOUR_VPS_IP:${PORT}/qr
+🕐 <i>${new Date().toLocaleString()}</i>
   `);
 });
 
 client.on("ready", () => {
-  console.log("✅ WhatsApp listo para enviar mensajes.");
+  console.log("✅ WhatsApp conectado y listo");
   isReady = true;
   sessionStatus = "authenticated";
   qrCodeUrl = null;
   initializationAttempts = 0;
 
-  // ✅ NOTIFICACIÓN: Servicio activo (solo al iniciar)
   sendTelegramNotification(`
-✅ <b>WHATSAPP BOT - SESIÓN ACTIVA</b>
+✅ <b>WHATSAPP BOT - CONECTADO</b>
 
-¡WhatsApp se ha conectado correctamente!
+¡Sesión activa en el VPS!
 
-📊 <b>Estado:</b> Conectado y listo
-🕐 <b>Inicio:</b> ${new Date().toLocaleString()}
 🌐 <b>Servidor:</b> Puerto ${PORT}
-
-💬 El bot está listo para enviar mensajes.
+🕐 <b>Inicio:</b> ${new Date().toLocaleString()}
+📊 <b>Estado:</b> Listo para enviar mensajes
   `);
-});
-
-client.on("authenticated", () => {
-  console.log("🔑 Sesión autenticada correctamente.");
-  sessionStatus = "authenticated";
 });
 
 client.on("auth_failure", async (msg) => {
@@ -182,108 +161,73 @@ client.on("auth_failure", async (msg) => {
   sessionStatus = "auth_failure";
   isReady = false;
 
-  // 🔴 NOTIFICACIÓN: FALLO de autenticación
   sendTelegramNotification(`
-❌ <b>WHATSAPP BOT - ERROR DE AUTENTICACIÓN</b>
+❌ <b>ERROR DE AUTENTICACIÓN</b>
 
-🚨 Fallo en la autenticación de WhatsApp.
+Fallo en WhatsApp: ${msg}
 
-📋 <b>Detalles:</b>
-• Error: ${msg}
-• Timestamp: ${new Date().toLocaleString()}
-
-🔧 <b>Acción requerida:</b>
-Reinicia el servicio y escanea el QR nuevamente.
+🕐 ${new Date().toLocaleString()}
   `);
 });
 
 client.on("disconnected", async (reason) => {
-  console.log("🔌 Cliente desconectado:", reason);
+  console.log("🔌 Desconectado:", reason);
   isReady = false;
   sessionStatus = "disconnected";
 
-  // 🔴 NOTIFICACIÓN: FALLO de conexión
   sendTelegramNotification(`
-🔌 <b>WHATSAPP BOT - SESIÓN DESCONECTADA</b>
+🔌 <b>WHATSAPP DESCONECTADO</b>
 
-⚠️ WhatsApp se ha desconectado.
+Razón: ${reason}
 
-📋 <b>Razón:</b> ${reason}
-🕐 <b>Timestamp:</b> ${new Date().toLocaleString()}
-
-🔄 <b>Acción:</b> 
-El sistema intentará reconectar automáticamente.
+🔄 Reconectando automáticamente...
+🕐 ${new Date().toLocaleString()}
   `);
 
   const delay = Math.min(10000 * (initializationAttempts + 1), 60000);
-  console.log(`🔄 Intentando reconectar en ${delay / 1000} segundos...`);
-
-  setTimeout(() => {
-    initializeClient();
-  }, delay);
+  setTimeout(() => initializeClient(), delay);
 });
 
 // =============================================
 // 🔧 MÓDULO DE INICIALIZACIÓN WHATSAPP
 // =============================================
 
-/**
- * Función para inicializar el cliente de WhatsApp
- */
 const initializeClient = async () => {
   if (initializationAttempts >= MAX_INIT_ATTEMPTS) {
-    console.error("🚫 Máximo número de intentos de inicialización alcanzado");
-    
-    // 🔴 NOTIFICACIÓN: FALLO máximo de intentos
+    console.error("🚫 Máximo de intentos alcanzado");
     sendTelegramNotification(`
-🚫 <b>WHATSAPP BOT - MÁXIMO DE INTENTOS ALCANZADO</b>
+🚫 <b>MÁXIMO DE INTENTOS</b>
 
-❌ No se pudo inicializar WhatsApp después de ${MAX_INIT_ATTEMPTS} intentos.
+No se pudo conectar WhatsApp después de ${MAX_INIT_ATTEMPTS} intentos
 
-🔧 <b>Acción requerida:</b>
-Reinicia manualmente el servicio.
+🔧 Reinicia el servicio manualmente
     `);
     return;
   }
 
   initializationAttempts++;
-  console.log(
-    `🔄 Intento de inicialización ${initializationAttempts}/${MAX_INIT_ATTEMPTS}`
-  );
+  console.log(`🔄 Intento ${initializationAttempts}/${MAX_INIT_ATTEMPTS}`);
 
   try {
     await client.initialize();
-    console.log("✅ Cliente WhatsApp inicializado correctamente");
+    console.log("✅ Cliente WhatsApp inicializado");
   } catch (error) {
-    console.error(
-      `❌ Error en intento ${initializationAttempts}:`,
-      error.message
-    );
+    console.error(`❌ Error:`, error.message);
 
-    // 🔴 NOTIFICACIÓN: FALLO de inicialización
-    if (initializationAttempts === 1) { // Solo notificar en el primer fallo
+    if (initializationAttempts === 1) {
       sendTelegramNotification(`
-⚠️ <b>WHATSAPP BOT - ERROR EN INICIALIZACIÓN</b>
+⚠️ <b>ERROR EN INICIALIZACIÓN</b>
 
-❌ Error al inicializar WhatsApp.
+Error: ${error.message}
+Intento: ${initializationAttempts}/${MAX_INIT_ATTEMPTS}
 
-📋 <b>Detalles:</b>
-• Error: ${error.message}
-• Intento: ${initializationAttempts}/${MAX_INIT_ATTEMPTS}
-• Timestamp: ${new Date().toLocaleString()}
-
-🔄 <b>Acción:</b> 
-Reintentando automáticamente...
+🔄 Reintentando...
       `);
     }
 
     if (initializationAttempts < MAX_INIT_ATTEMPTS) {
       const delay = 5000 * initializationAttempts;
-      console.log(`⏳ Reintentando en ${delay / 1000} segundos...`);
-
-      setTimeout(() => {
-        initializeClient();
-      }, delay);
+      setTimeout(() => initializeClient(), delay);
     }
   }
 };
@@ -292,9 +236,6 @@ Reintentando automáticamente...
 // 🌐 MÓDULO DE ENDPOINTS API
 // =============================================
 
-/**
- * GET /health - Estado del servicio
- */
 app.get("/health", (req, res) => {
   res.json({
     status: "ok",
@@ -302,37 +243,26 @@ app.get("/health", (req, res) => {
       ready: isReady,
       sessionStatus: sessionStatus,
       qrAvailable: !!qrCodeUrl,
-      initializationAttempts: initializationAttempts,
     },
-    telegram: {
-      notifications: "✅ Activas (solo para fallos)",
-      chatId: TELEGRAM_CHAT_ID ? "✅ Configurado" : "❌ Faltante",
-    },
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
+    server: {
+      port: PORT,
+      uptime: process.uptime(),
+      timestamp: new Date().toISOString(),
+    }
   });
 });
 
-/**
- * GET /qr - Obtener código QR
- */
 app.get("/qr", (req, res) => {
   if (qrCodeUrl) {
-    res.json({
-      qrUrl: qrCodeUrl,
-      status: sessionStatus,
-    });
+    res.json({ qrUrl: qrCodeUrl, status: sessionStatus });
   } else {
-    res.json({
-      status: sessionStatus,
-      message: isReady ? "WhatsApp autenticado" : "QR no disponible",
+    res.json({ 
+      status: sessionStatus, 
+      message: isReady ? "WhatsApp autenticado" : "QR no disponible" 
     });
   }
 });
 
-/**
- * POST /send - Enviar mensajes de WhatsApp
- */
 app.post("/send", async (req, res) => {
   const authHeader = req.headers.authorization;
   const token = authHeader?.replace("Bearer ", "");
@@ -352,19 +282,16 @@ app.post("/send", async (req, res) => {
   }
 
   const numerosArray = numeros
-    .map((n) => String(n).trim())
-    .filter((n) => /^\d{10}$/.test(n))
-    .map((n) => ({
-      local: n,
-      jid: "521" + n + "@c.us",
-    }));
+    .map(n => String(n).replace(/\D/g, ''))
+    .filter(n => n.length === 10)
+    .map(n => ({ local: n, jid: `521${n}@c.us` }));
 
   if (numerosArray.length === 0) {
     return res.status(400).json({ error: "❌ Ningún número válido" });
   }
 
   const resultados = [];
-  let erroresCriticos = 0;
+  let errores = 0;
 
   for (const { local, jid } of numerosArray) {
     try {
@@ -377,41 +304,24 @@ app.post("/send", async (req, res) => {
       await client.sendMessage(jid, msg);
       resultados.push({ numero: local, estado: "✅ Enviado" });
     } catch (err) {
-      resultados.push({
-        numero: local,
-        estado: "❌ Error",
-        error: err.message,
-      });
-      erroresCriticos++;
+      resultados.push({ numero: local, estado: "❌ Error", error: err.message });
+      errores++;
     }
   }
 
-  // 🔴 NOTIFICACIÓN: Si hay muchos errores en el envío
-  if (erroresCriticos > numerosArray.length / 2) {
+  if (errores > numerosArray.length / 2) {
     sendTelegramNotification(`
-⚠️ <b>WHATSAPP BOT - MÚLTIPLES ERRORES EN ENVÍO</b>
+⚠️ <b>MÚLTIPLES ERRORES EN ENVÍO</b>
 
-❌ Se detectaron múltiples errores al enviar mensajes.
-
-📋 <b>Estadísticas:</b>
-• Total: ${numerosArray.length}
-• Exitosos: ${numerosArray.length - erroresCriticos}
-• Fallidos: ${erroresCriticos}
-• Timestamp: ${new Date().toLocaleString()}
-
-🔧 <b>Revisar:</b>
-• Conexión a internet
-• Estado de WhatsApp
-• Números válidos
+Total: ${numerosArray.length}
+Éxitos: ${numerosArray.length - errores}
+Fallos: ${errores}
     `);
   }
 
   res.json({ resultado: resultados });
 });
 
-/**
- * POST /clean-session - Limpiar sesión de WhatsApp
- */
 app.post("/clean-session", async (req, res) => {
   const authHeader = req.headers.authorization;
   const token = authHeader?.replace("Bearer ", "");
@@ -422,80 +332,45 @@ app.post("/clean-session", async (req, res) => {
 
   try {
     await client.logout();
-
     const fs = require("fs");
     const sessionPath = "./.wwebjs_auth";
     if (fs.existsSync(sessionPath)) {
       fs.rmSync(sessionPath, { recursive: true });
     }
 
-    console.log("✅ Sesión limpiada completamente");
-    
-    // ✅ NOTIFICACIÓN: Sesión limpiada (acción administrativa)
-    sendTelegramNotification(`
-🧹 <b>WHATSAPP BOT - SESIÓN LIMPIADA</b>
-
-✅ Sesión de WhatsApp limpiada manualmente.
-
-🕐 <i>Timestamp: ${new Date().toLocaleString()}</i>
-
-⚠️ <b>Se requiere nueva autenticación con QR</b>
-    `);
-    
+    sendTelegramNotification("🧹 <b>SESIÓN LIMPIADA</b>\nSe requiere nuevo QR");
     res.json({ success: true, message: "Sesión eliminada" });
   } catch (error) {
-    // 🔴 NOTIFICACIÓN: FALLO al limpiar sesión
-    sendTelegramNotification(`
-❌ <b>WHATSAPP BOT - ERROR AL LIMPIAR SESIÓN</b>
-
-🚨 Fallo al intentar limpiar la sesión.
-
-📋 <b>Detalles:</b>
-• Error: ${error.message}
-• Timestamp: ${new Date().toLocaleString()}
-    `);
-    
+    sendTelegramNotification(`❌ <b>ERROR LIMPIANDO SESIÓN</b>\n${error.message}`);
     res.status(500).json({ error: error.message });
   }
 });
 
 // =============================================
-// 🚀 MÓDULO DE INICIALIZACIÓN DE LA APLICACIÓN
+// 🚀 INICIALIZACIÓN Y CONFIGURACIÓN DEL SERVIDOR
 // =============================================
 
-/**
- * Función principal de inicialización de la aplicación
- */
 const initializeApp = async () => {
   try {
-    console.log("🚀 Iniciando aplicación...");
+    console.log("🚀 Iniciando WhatsApp Bot en VPS...");
 
-    // ✅ NOTIFICACIÓN: Inicio del servicio
-    sendTelegramNotification(`
-🚀 <b>WHATSAPP BOT - INICIANDO SERVICIO</b>
-
-📊 El servicio de WhatsApp Bot se está iniciando.
+    await sendTelegramNotification(`
+🚀 <b>WHATSAPP BOT INICIADO - VPS LINUX</b>
 
 🌐 <b>Servidor:</b> Puerto ${PORT}
 🕐 <b>Inicio:</b> ${new Date().toLocaleString()}
+📊 <b>Estado:</b> Inicializando...
 
-📨 <b>Notificaciones:</b> Activadas (solo para fallos)
-💡 <b>Endpoint estado:</b> http://localhost:${PORT}/health
-
-📤 <b>Ejemplo uso /send:</b>
-<code>curl -X POST http://localhost:${PORT}/send \\
-  -H "Authorization: Bearer CONTRASEÑA" \\
+💻 <b>Ejemplo de uso:</b>
+<code>curl -X POST http://YOUR_VPS_IP:${PORT}/send \\
+  -H "Authorization: Bearer ${AUTH_TOKEN}" \\
   -H "Content-Type: application/json" \\
-  -d '{"msg": "Hola", "numeros": ["5512345678"]}'</code>
-
-⏳ Inicializando WhatsApp...
+  -d '{"msg": "Hola desde VPS", "numeros": ["5512345678"]}'</code>
     `);
 
-    setTimeout(() => {
-      initializeClient();
-    }, 2000);
+    setTimeout(initializeClient, 2000);
   } catch (error) {
-    console.error("❌ Error al inicializar aplicación:", error);
+    console.error("❌ Error inicializando:", error);
   }
 };
 
@@ -503,45 +378,21 @@ const initializeApp = async () => {
 // ⚡ INICIO DEL SERVIDOR
 // =============================================
 
-app.listen(PORT, () => {
-  console.log(`🌐 Servidor Express iniciado en http://localhost:${PORT}`);
-  console.log(`\n📞 ENDPOINTS DISPONIBLES:`);
-  console.log(`   GET  /health          - Estado del servicio`);
-  console.log(`   GET  /qr             - Obtener QR code`);
-  console.log(`   POST /send           - Enviar mensajes WhatsApp`);
-  console.log(`   POST /clean-session  - Limpiar sesión`);
-  console.log(`\n🔔 CONFIGURACIÓN TELEGRAM:`);
-  console.log(`   • Notificaciones: ✅ Activas (solo para fallos)`);
-  console.log(`   • Chat ID: ${TELEGRAM_CHAT_ID ? '✅ Configurado' : '❌ Faltante'}`);
-  console.log(`\n🔐 Token de autorización: ${AUTH_TOKEN}`);
-  console.log(`\n🚨 TELEGRAM NOTIFICARÁ:`);
-  console.log(`   • Inicio/cierre del servicio`);
-  console.log(`   • Necesidad de QR`);
-  console.log(`   • Fallos de autenticación`);
-  console.log(`   • Desconexiones`);
-  console.log(`   • Errores críticos en envíos`);
-  console.log(`   • Fallos de inicialización\n`);
-
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🌐 Servidor ejecutándose en http://0.0.0.0:${PORT}`);
+  console.log(`\n📞 ENDPOINTS:`);
+  console.log(`   GET  /health         - Estado del servicio`);
+  console.log(`   GET  /qr            - Obtener QR`);
+  console.log(`   POST /send          - Enviar mensajes`);
+  console.log(`   POST /clean-session - Limpiar sesión`);
+  console.log(`\n🔐 Token: ${AUTH_TOKEN}`);
+  console.log(`📱 Telegram: ✅ Notificaciones activas\n`);
+  
   initializeApp();
 });
 
-// =============================================
-// 🛑 MÓDULO DE MANEJO DE CERRADO
-// =============================================
-
 process.on("SIGINT", async () => {
   console.log("🛑 Cerrando aplicación...");
-  
-  // ✅ NOTIFICACIÓN: Cierre del servicio
-  await sendTelegramNotification(`
-🛑 <b>WHATSAPP BOT - SERVICIO CERRADO</b>
-
-El servicio se está cerrando.
-
-🕐 <i>Timestamp: ${new Date().toLocaleString()}</i>
-
-📊 <b>Tiempo activo:</b> ${Math.floor(process.uptime() / 60)} minutos
-  `);
-  
+  await sendTelegramNotification("🛑 <b>SERVICIO CERRADO</b>");
   process.exit(0);
 });
