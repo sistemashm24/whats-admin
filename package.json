@@ -1,0 +1,34 @@
+{
+  "name": "whatsapp-bot-empresa",
+  "version": "2.0.0",
+  "description": "Bot de WhatsApp con notificaciones Telegram",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "axios": "^1.5.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.6.1",
+    "express": "^4.21.2",
+    "express-rate-limit": "^6.8.1",
+    "helmet": "^7.0.0",
+    "node-telegram-bot-api": "^0.66.0",
+    "qrcode": "^1.5.4",
+    "qrcode-terminal": "^0.12.0",
+    "whatsapp-web.js": "^1.34.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "keywords": [
+    "whatsapp",
+    "bot",
+    "telegram",
+    "notifications"
+  ],
+  "author": "Tu Empresa",
+  "license": "MIT"
+}

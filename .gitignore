@@ -1,0 +1,27 @@
+# Node.js dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Env files
+.env
+
+# Sesiones de WhatsApp
+.wwebjs_auth/
+.wwebjs_cache/
+*.session.json
+
+# Logs
+logs/
+*.log
+
+# IDEs / sistemas operativos
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Otros
+dist/
+build/
